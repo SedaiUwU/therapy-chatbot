@@ -23,7 +23,7 @@ model = Model(
 
 st.set_page_config(page_title="Therapy AI", page_icon="🧠", layout="centered")
 
-st.title("🧠 Therapy AI Companion (v5 Engine)")
+st.title("🧠 Therapy AI Companion")
 st.caption("Emotionally intelligent conversational AI (not a therapist)")
 
 st.markdown("""
