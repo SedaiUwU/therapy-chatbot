@@ -45,15 +45,22 @@ if "mood_log" not in st.session_state:
 if "last_topic" not in st.session_state:
     st.session_state.last_topic = ""
 
+if "emotion_streak" not in st.session_state:
+    st.session_state.emotion_streak = 0
+
+
 def detect_mood(text):
     text = text.lower()
     if any(w in text for w in ["sad", "cry", "upset", "depressed"]):
         return "sad"
     if any(w in text for w in ["stress", "stressed", "overwhelmed", "exam"]):
         return "stressed"
+    if any(w in text for w in ["worried", "anxious", "scared"]):
+        return "anxious"
     if any(w in text for w in ["happy", "good", "great", "okay"]):
         return "neutral"
     return "neutral"
+
 
 def type_writer(text):
     placeholder = st.empty()
@@ -63,6 +70,7 @@ def type_writer(text):
         time.sleep(0.01)
         placeholder.markdown(typed)
 
+
 def clean_output(text):
     if not text:
         return ""
@@ -70,20 +78,25 @@ def clean_output(text):
     text = text.strip()
     text = re.sub(r"\s+", " ", text)
 
-    if len(text) < 8:
+    if len(text) < 10:
         return ""
 
     return text
 
+
+def safe_fallback():
+    return "I hear you. That sounds like a lot to carry right now. We can stay with this moment together if you want."
+
+
 def get_ai_response(prompt):
 
-    for _ in range(2):  # retry twice
+    for _ in range(2):
         try:
             response = model.generate(
                 prompt=prompt,
                 params={
                     "max_new_tokens": 250,
-                    "temperature": 0.5
+                    "temperature": 0.6
                 }
             )
 
@@ -96,19 +109,27 @@ def get_ai_response(prompt):
         except Exception:
             continue
 
-    return "I'm here with you. Can you tell me a bit more about what's going on?"
+    return safe_fallback()
+
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+
 
 user_input = st.chat_input("How are you feeling today?")
 
 if user_input:
 
     mood = detect_mood(user_input)
+
     st.session_state.mood_log.append(mood)
     st.session_state.last_topic = user_input
+
+    if len(st.session_state.mood_log) > 1 and st.session_state.mood_log[-1] == st.session_state.mood_log[-2]:
+        st.session_state.emotion_streak += 1
+    else:
+        st.session_state.emotion_streak = 0
 
     st.session_state.messages.append({
         "role": "user",
@@ -122,97 +143,64 @@ if user_input:
 
     if any(word in user_input.lower() for word in danger_words):
         ai_reply = (
-            "I'm really sorry you're feeling this way. You're not alone. "
-            "If you can, please reach out to someone you trust or a support service."
+            "I'm really sorry you're feeling this way. You're not alone, and what you're feeling matters. "
+            "If possible, please reach out to someone you trust or a support service right now."
         )
+
     else:
 
-        prompt = f"""
-You are an emotionally intelligent, calm, grounding conversational AI companion.
+        # EMOTION FLOW CONTROL (prevents looping / repetition)
+        if st.session_state.emotion_streak >= 2:
+            prompt = f"""
+You are a calm grounding assistant.
 
-You are NOT a therapist, NOT a coach, and NOT a problem-solving assistant.
+The user is stuck in repeated emotional patterns.
 
-Your role is to provide emotional stability, not solutions.
+RULES:
+- Reduce emotional intensity
+- Do NOT repeat empathy phrases
+- Do NOT over-explain
+- Give grounding + gentle forward direction
+- 2–3 sentences only
+
+USER MESSAGE:
+{user_input}
+
+RESPONSE:
+"""
+        else:
+
+            prompt = f"""
+You are an emotionally intelligent, calm conversational AI companion.
 
 ==================================================
 CORE PRINCIPLES
 ==================================================
 
-1. VALIDATION FIRST
-Always acknowledge emotion clearly.
-
-2. DO NOT FIX OR SOLVE EMOTIONS
-You are not here to solve situations or give instructions unless explicitly asked.
-
-3. DO NOT LEAVE USER “FLOATING”
-If the user asks "what do I do?" or shows helplessness:
-→ You MUST include a grounding statement that reduces emotional intensity.
-
-4. NO REPETITIVE EMPATHY
-Avoid repeating:
-- "it's okay"
-- "you're not alone"
-- "that's tough"
-
-Use varied natural language.
-
-5. MAX 1 QUESTION ONLY IF APPROPRIATE
-If user is uncertain or overwhelmed → DO NOT ask questions.
+- Acknowledge emotion briefly
+- Reflect situation naturally
+- Provide grounding (important)
+- Avoid repetitive empathy loops
+- Avoid over-questioning
 
 ==================================================
-REQUIRED RESPONSE STRUCTURE
+STRICT RULES
 ==================================================
 
-Every response must include:
-
-1. Emotional reflection (what user feels)
-2. Situational acknowledgment (what is happening)
-3. Grounding line (VERY IMPORTANT)
-   → helps user feel stable in the moment
-
-OPTIONAL:
-- 1 gentle question ONLY if user is stable
+- NEVER repeat phrases like "it's okay" constantly
+- NEVER over-ask questions
+- NEVER give long advice
+- NEVER escalate emotional intensity
+- NEVER ignore "what do I do"
 
 ==================================================
-GROUNDING RULES (CRITICAL)
+GROUNDING STYLE
 ==================================================
 
-When user is:
-- overwhelmed
-- helpless
-- confused
-- anxious
-
-You MUST:
-- slow emotional intensity
-- avoid escalation
-- avoid too much empathy stacking
-- provide calm stabilizing phrasing like:
-  - "That’s a lot to carry right now."
-  - "You don’t have to figure everything out at once."
-  - "We can just stay with this moment for now."
-
-==================================================
-STRICT BAN LIST
-==================================================
-
-Never say:
-- "just try to relax"
-- "don't worry"
-- "everything will be fine"
-- "look on the bright side"
-- "maybe it's because..."
-- excessive reassurance loops
-
-==================================================
-STYLE
-==================================================
-
-- 2–5 sentences max
-- natural human tone
-- emotionally steady
-- no robotic patterns
-- no repeated phrases across messages
+Use calm stabilizing tone like:
+- "That sounds like a lot to carry right now."
+- "We can take this moment slowly."
+- "You don’t need to figure everything out at once."
 
 ==================================================
 USER MESSAGE
@@ -223,16 +211,16 @@ USER MESSAGE
 ASSISTANT RESPONSE:
 """
 
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                ai_reply = get_ai_response(prompt)
-
-            type_writer(ai_reply)
+        ai_reply = get_ai_response(prompt)
 
     st.session_state.messages.append({
         "role": "assistant",
         "content": ai_reply
     })
+
+    with st.chat_message("assistant"):
+        type_writer(ai_reply)
+
 
 with st.sidebar:
     st.header("📊 Mood Tracker")
@@ -244,4 +232,4 @@ with st.sidebar:
         st.write("No data yet")
 
     st.markdown("---")
-    st.write("💡 Tip: Try talking about stress, exams, or relationships.")
+    st.write("Tip: Try talking about stress, exams, or relationships or anything on your mind.")
