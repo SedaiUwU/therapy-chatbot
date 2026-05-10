@@ -1,5 +1,6 @@
 import streamlit as st
 import re
+import time
 
 from ibm_watsonx_ai.foundation_models import Model
 from ibm_watsonx_ai import Credentials
@@ -19,19 +20,31 @@ model = Model(
     project_id=PROJECT_ID
 )
 
-st.set_page_config(page_title="Therapy AI Chatbot", page_icon="🧠")
+st.set_page_config(page_title="Therapy AI Chatbot", page_icon="🧠", layout="centered")
 
 st.title("🧠 Therapy AI Chatbot")
-st.caption("Supportive AI assistant (not a therapist)")
+st.caption("A supportive AI companion powered by IBM Watsonx (not a therapist)")
+st.info("You can talk about stress, exams, relationships, or anything on your mind.")
+
+st.markdown("""
+<style>
+.stChatMessage {
+    padding: 10px;
+    border-radius: 12px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-
-user_input = st.chat_input("How are you feeling today?")
+def type_writer(text):
+    placeholder = st.empty()
+    typed = ""
+    for char in text:
+        typed += char
+        time.sleep(0.01)
+        placeholder.markdown(typed)
 
 def clean_output(text):
     text = re.sub(r"\bI don't know.*", "", text, flags=re.IGNORECASE)
@@ -40,6 +53,12 @@ def clean_output(text):
     text = re.sub(r"\bi am.*", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+user_input = st.chat_input("How are you feeling today?")
 
 if user_input:
 
@@ -55,48 +74,42 @@ if user_input:
 
     if any(word in user_input.lower() for word in danger_words):
         ai_reply = (
-            "I'm really sorry you're feeling this way. "
-            "You're not alone, and talking to someone you trust can really help. "
-            "I'm here to support you."
+            "I'm really sorry you're feeling this way. You're not alone, and it may help to reach out to someone you trust or a support service."
         )
 
     else:
 
         prompt = f"""
-SYSTEM MODE: SUPPORTIVE CONVERSATIONAL ASSISTANT
+You are a calm, supportive conversational AI companion.
 
-You are a calm, natural, human-like supportive chatbot.
+GOALS:
+- Provide emotional support
+- Keep conversation natural and human-like
+- Avoid being overly robotic or instructional
 
-Your goal is to have realistic supportive conversations, NOT to constantly give advice.
+RULES:
+- 2–5 short sentences
+- Prioritize empathy over advice
+- Do NOT overuse suggestions or steps
+- Do NOT sound like a productivity or coaching app
+- Keep tone warm and human
 
-CORE RULES:
+STYLE:
+- Simple language
+- Natural flow
+- Gentle responses
 
-1. DO NOT give advice in every response
-2. PRIORITIZE conversation over problem-solving
-3. NEVER force action steps in emotional situations
-4. NEVER repeat the same suggestion style
-5. NEVER sound like a productivity app
-
-RESPONSE RULE:
-
-Choose ONE:
-A) Reflect
-B) Explore
-C) Light suggestion (only if appropriate)
-
-2–4 sentences max.
-
-USER MESSAGE:
+User message:
 {user_input}
 
-ASSISTANT RESPONSE:
+Response:
 """
 
         response = model.generate(
             prompt=prompt,
             params={
                 "max_new_tokens": 200,
-                "temperature": 0.6
+                "temperature": 0.7
             }
         )
 
@@ -109,4 +122,4 @@ ASSISTANT RESPONSE:
     })
 
     with st.chat_message("assistant"):
-        st.markdown(ai_reply)
+        type_writer(ai_reply)
