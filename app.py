@@ -1,6 +1,7 @@
 import streamlit as st
 import re
 import time
+import random
 
 from ibm_watsonx_ai.foundation_models import Model
 from ibm_watsonx_ai import Credentials
@@ -20,23 +21,39 @@ model = Model(
     project_id=PROJECT_ID
 )
 
-st.set_page_config(page_title="Therapy AI Chatbot", page_icon="🧠", layout="centered")
+st.set_page_config(page_title="Therapy AI", page_icon="🧠", layout="centered")
 
-st.title("🧠 Therapy AI Chatbot")
-st.caption("A supportive AI companion powered by IBM Watsonx (not a therapist)")
-st.info("You can talk about stress, exams, relationships, or anything on your mind.")
+st.title("🧠 Therapy AI Companion")
+st.caption("A supportive AI built for emotional conversations (not a therapist)")
 
 st.markdown("""
 <style>
 .stChatMessage {
-    padding: 10px;
-    border-radius: 12px;
+    padding: 12px;
+    border-radius: 14px;
+    font-size: 15px;
 }
 </style>
 """, unsafe_allow_html=True)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
+if "mood_log" not in st.session_state:
+    st.session_state.mood_log = []
+
+if "last_topic" not in st.session_state:
+    st.session_state.last_topic = ""
+
+def detect_mood(text):
+    text = text.lower()
+    if any(w in text for w in ["sad", "cry", "upset", "depressed"]):
+        return "sad"
+    if any(w in text for w in ["stress", "stressed", "overwhelmed", "exam"]):
+        return "stressed"
+    if any(w in text for w in ["happy", "good", "great", "okay"]):
+        return "neutral"
+    return "neutral"
 
 def type_writer(text):
     placeholder = st.empty()
@@ -47,12 +64,39 @@ def type_writer(text):
         placeholder.markdown(typed)
 
 def clean_output(text):
-    text = re.sub(r"\bI don't know.*", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bI feel.*", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bI'm.*", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bi am.*", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return ""
+
+    text = text.strip()
+    text = re.sub(r"\s+", " ", text)
+
+    if len(text) < 8:
+        return ""
+
     return text
+
+def get_ai_response(prompt):
+
+    for _ in range(2):  # retry twice
+        try:
+            response = model.generate(
+                prompt=prompt,
+                params={
+                    "max_new_tokens": 250,
+                    "temperature": 0.8
+                }
+            )
+
+            text = response["results"][0].get("generated_text", "")
+            text = clean_output(text)
+
+            if text:
+                return text
+
+        except Exception:
+            continue
+
+    return "I'm here with you. Can you tell me a bit more about what's going on?"
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
@@ -61,6 +105,10 @@ for msg in st.session_state.messages:
 user_input = st.chat_input("How are you feeling today?")
 
 if user_input:
+
+    mood = detect_mood(user_input)
+    st.session_state.mood_log.append(mood)
+    st.session_state.last_topic = user_input
 
     st.session_state.messages.append({
         "role": "user",
@@ -74,52 +122,51 @@ if user_input:
 
     if any(word in user_input.lower() for word in danger_words):
         ai_reply = (
-            "I'm really sorry you're feeling this way. You're not alone, and it may help to reach out to someone you trust or a support service."
+            "I'm really sorry you're feeling this way. You're not alone. "
+            "If you can, please reach out to someone you trust or a support service."
         )
-
     else:
 
         prompt = f"""
-You are a calm, supportive conversational AI companion.
+You are a calm, supportive conversational companion.
 
-GOALS:
-- Provide emotional support
-- Keep conversation natural and human-like
-- Avoid being overly robotic or instructional
+IMPORTANT RULES:
+- Be natural, human-like, and conversational
+- Do NOT sound like a therapist or coach
+- Do NOT give too many solutions
+- 2–5 short sentences only
+- Focus on emotional understanding first
 
-RULES:
-- 2–5 short sentences
-- Prioritize empathy over advice
-- Do NOT overuse suggestions or steps
-- Do NOT sound like a productivity or coaching app
-- Keep tone warm and human
+CONTEXT:
+User mood: {mood}
+Previous topic: {st.session_state.last_topic}
 
-STYLE:
-- Simple language
-- Natural flow
-- Gentle responses
-
-User message:
+USER MESSAGE:
 {user_input}
 
-Response:
+RESPONSE:
 """
 
-        response = model.generate(
-            prompt=prompt,
-            params={
-                "max_new_tokens": 200,
-                "temperature": 0.7
-            }
-        )
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                ai_reply = get_ai_response(prompt)
 
-        ai_reply = response["results"][0]["generated_text"]
-        ai_reply = clean_output(ai_reply)
+            type_writer(ai_reply)
 
     st.session_state.messages.append({
         "role": "assistant",
         "content": ai_reply
     })
 
-    with st.chat_message("assistant"):
-        type_writer(ai_reply)
+# ---- SIDEBAR (HACKATHON BOOST FEATURE) ----
+with st.sidebar:
+    st.header("📊 Mood Tracker")
+
+    if st.session_state.mood_log:
+        st.write("Recent moods:")
+        st.write(st.session_state.mood_log[-10:])
+    else:
+        st.write("No data yet")
+
+    st.markdown("---")
+    st.write("💡 Tip: Try talking about stress, exams, or relationships.")
