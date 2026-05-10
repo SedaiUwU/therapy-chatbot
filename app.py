@@ -23,8 +23,8 @@ model = Model(
 
 st.set_page_config(page_title="Therapy AI", page_icon="🧠", layout="centered")
 
-st.title("🧠 Therapy AI Companion")
-st.caption("A supportive AI built for emotional conversations (not a therapist)")
+st.title("🧠 Therapy AI Companion (v5 Engine)")
+st.caption("Emotionally intelligent conversational AI (not a therapist)")
 
 st.markdown("""
 <style>
@@ -48,6 +48,9 @@ if "last_topic" not in st.session_state:
 if "emotion_streak" not in st.session_state:
     st.session_state.emotion_streak = 0
 
+if "stuck_state" not in st.session_state:
+    st.session_state.stuck_state = 0
+
 
 def detect_mood(text):
     text = text.lower()
@@ -60,6 +63,18 @@ def detect_mood(text):
     if any(w in text for w in ["happy", "good", "great", "okay"]):
         return "neutral"
     return "neutral"
+
+
+def detect_stuck(text):
+    text = text.lower()
+    return any(w in text for w in [
+        "i don't know",
+        "idk",
+        "not sure",
+        "nothing",
+        "i'm not sure",
+        "i have no idea"
+    ])
 
 
 def type_writer(text):
@@ -85,11 +100,10 @@ def clean_output(text):
 
 
 def safe_fallback():
-    return "I hear you. That sounds like a lot to carry right now. We can stay with this moment together if you want."
+    return "I hear you. That sounds like a lot to carry right now. We can just stay with this moment together."
 
 
 def get_ai_response(prompt):
-
     for _ in range(2):
         try:
             response = model.generate(
@@ -122,14 +136,22 @@ user_input = st.chat_input("How are you feeling today?")
 if user_input:
 
     mood = detect_mood(user_input)
+    stuck = detect_stuck(user_input)
 
     st.session_state.mood_log.append(mood)
     st.session_state.last_topic = user_input
 
+    # emotion streak tracking
     if len(st.session_state.mood_log) > 1 and st.session_state.mood_log[-1] == st.session_state.mood_log[-2]:
         st.session_state.emotion_streak += 1
     else:
         st.session_state.emotion_streak = 0
+
+    # stuck state tracking
+    if stuck:
+        st.session_state.stuck_state += 1
+    else:
+        st.session_state.stuck_state = 0
 
     st.session_state.messages.append({
         "role": "user",
@@ -149,87 +171,112 @@ if user_input:
 
     else:
 
-        # EMOTION FLOW CONTROL (prevents looping / repetition)
-        if st.session_state.emotion_streak >= 2:
-            prompt = f"""
-You are a calm grounding assistant.
+        # ==============================
+        # EMOTIONAL REASONING ENGINE v5
+        # ==============================
 
-The user is stuck in repeated emotional patterns.
+        # STUCK STATE OVERRIDE (CRITICAL FIX)
+        if st.session_state.stuck_state >= 1:
+            prompt = f"""
+You are a grounding-focused emotional AI.
+
+The user is stuck or uncertain.
 
 RULES:
-- Reduce emotional intensity
-- Do NOT repeat empathy phrases
-- Do NOT over-explain
-- Give grounding + gentle forward direction
-- 2–3 sentences only
+- DO NOT ask questions
+- DO NOT increase thinking load
+- DO NOT repeat empathy loops
+- Keep response calm and short (2-3 sentences)
+
+TASK:
+- Validate uncertainty
+- Reduce pressure
+- Provide emotional grounding
 
 USER MESSAGE:
 {user_input}
 
 RESPONSE:
 """
+
+        # EMOTION LOOP PROTECTION
+        elif st.session_state.emotion_streak >= 2:
+            prompt = f"""
+You are a calm emotional stabilizer AI.
+
+The user is stuck in emotional repetition.
+
+RULES:
+- reduce emotional intensity
+- avoid repeated empathy
+- avoid questions
+- give grounding + gentle forward direction
+- 2–3 sentences max
+
+USER MESSAGE:
+{user_input}
+
+RESPONSE:
+"""
+
         else:
 
             prompt = f"""
-You are an emotionally intelligent, calm conversational AI companion.
+You are an emotionally intelligent reasoning-based conversational AI companion (v5).
 
 ==================================================
-CORE PRINCIPLES
+CORE SYSTEM BEHAVIOR
 ==================================================
 
-- Acknowledge emotion briefly
-- Reflect situation naturally
-- Provide grounding (important)
-- Avoid repetitive empathy loops
-- Avoid over-questioning
+You MUST dynamically choose:
+
+1. EMOTIONAL REFLECTION (acknowledge)
+2. SITUATIONAL CLARITY (what is happening)
+3. GROUNDING OR DIRECTION (reduce emotional load OR gently move forward)
 
 ==================================================
-STRICT RULES
+CRITICAL RULES
 ==================================================
 
-- NEVER repeat phrases like "it's okay" constantly
-- NEVER over-ask questions
-- NEVER give long advice
-- NEVER escalate emotional intensity
-- NEVER ignore "what do I do"
+- NEVER loop empathy phrases
+- NEVER ask multiple questions
+- NEVER ignore confusion states
+- NEVER escalate emotion
+- NEVER behave like a therapist or coach
+- NEVER overload advice
 
 ==================================================
-STUCK STATE RULE
+STUCK STATE RULE (HIGHEST PRIORITY)
 ==================================================
 
-If user says:
+If user is uncertain or says:
 - "I don't know"
-- "I don't know what to do"
+- "not sure"
 - "nothing"
-- "I'm not sure"
-- or shows confusion + helplessness
 
-THEN YOU MUST:
-
-- NOT ask any questions
-- NOT redirect to "what's on your mind"
-- NOT increase cognitive load
-
-INSTEAD YOU MUST:
-
-✔ validate uncertainty
-✔ reduce pressure
-✔ normalize not having answers
-✔ optionally give gentle pause-based grounding
-
-Example style:
-- "That's okay, you don’t need to figure it out right now."
-- "You don’t have to solve anything in this moment."
-- "It’s alright to just sit with this feeling for a bit."
+THEN:
+- NO QUESTIONS ALLOWED
+- reduce emotional pressure
+- normalize uncertainty
+- provide calm grounding
 
 ==================================================
-GROUNDING STYLE
+OUTPUT STYLE
 ==================================================
 
-Use calm stabilizing tone like:
-- "That sounds like a lot to carry right now."
-- "We can take this moment slowly."
-- "You don’t need to figure everything out at once."
+- 2–5 sentences max
+- natural human tone
+- emotionally stable
+- non-repetitive
+- smooth flow (not robotic)
+
+==================================================
+GROUNDING PHRASES (USE VARIATION)
+==================================================
+
+- "That’s a lot to hold right now."
+- "You don’t need to figure this out immediately."
+- "We can just stay with this moment."
 
 ==================================================
 USER MESSAGE
@@ -261,4 +308,4 @@ with st.sidebar:
         st.write("No data yet")
 
     st.markdown("---")
-    st.write("Tip: Try talking about stress, exams, or relationships or anything on your mind.")
+    st.write("Tip: Try talking about stress, exams, relationships, or anything on your mind.")
