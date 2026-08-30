@@ -147,6 +147,47 @@ def safe_fallback():
     return "I hear you. That sounds like a lot to carry right now. We can just stay with this moment together."
 
 
+def build_recent_context(messages, max_messages=6):
+    """
+    Build recent conversation context from session messages.
+    
+    Excludes the current (latest) user message to avoid duplication.
+    Formats with clear role labels for the model.
+    
+    Args:
+        messages: List of message dicts with 'role' and 'content'
+        max_messages: Maximum number of recent messages to include
+        
+    Returns:
+        Formatted context string or empty string if no prior messages
+    """
+    if not messages:
+        return ""
+    
+    # Exclude the current user message (just added)
+    prior_messages = messages[:-1]
+    
+    if not prior_messages:
+        return ""
+    
+    # Keep only the last max_messages messages
+    recent = prior_messages[-max_messages:]
+    
+    context_lines = []
+    for msg in recent:
+        role = msg.get("role", "").strip().upper()
+        content = msg.get("content", "").strip()
+        
+        # Only include valid user and assistant messages with content
+        if role in ("USER", "ASSISTANT") and content:
+            context_lines.append(f"{role}: {content}")
+    
+    if not context_lines:
+        return ""
+    
+    return "\n".join(context_lines)
+
+
 def get_ai_response(prompt):
     model = get_model()
     if model is None:
@@ -227,6 +268,9 @@ if user_input:
 
         # STUCK STATE OVERRIDE (CRITICAL FIX)
         if st.session_state.stuck_state >= 1:
+            recent_context = build_recent_context(st.session_state.messages)
+            context_section = f"\n\nRECENT CONVERSATION:\n{recent_context}" if recent_context else ""
+            
             prompt = f"""
 You are a grounding-focused emotional AI.
 
@@ -241,9 +285,9 @@ RULES:
 TASK:
 - Validate uncertainty
 - Reduce pressure
-- Provide emotional grounding
+- Provide emotional grounding{context_section}
 
-USER MESSAGE:
+CURRENT USER MESSAGE:
 {user_input}
 
 RESPONSE:
@@ -251,6 +295,9 @@ RESPONSE:
 
         # EMOTION LOOP PROTECTION
         elif st.session_state.emotion_streak >= 2:
+            recent_context = build_recent_context(st.session_state.messages)
+            context_section = f"\n\nRECENT CONVERSATION:\n{recent_context}" if recent_context else ""
+            
             prompt = f"""
 You are a calm emotional stabilizer AI.
 
@@ -261,15 +308,17 @@ RULES:
 - avoid repeated empathy
 - avoid questions
 - give grounding + gentle forward direction
-- 2–3 sentences max
+- 2–3 sentences max{context_section}
 
-USER MESSAGE:
+CURRENT USER MESSAGE:
 {user_input}
 
 RESPONSE:
 """
 
         else:
+            recent_context = build_recent_context(st.session_state.messages)
+            context_display = recent_context if recent_context else "(No prior conversation)"
 
             prompt = f"""
 You are an emotionally intelligent reasoning-based conversational AI companion (v5).
@@ -353,7 +402,13 @@ Example format:
 - optional gentle reassurance line
 
 ==================================================
-USER MESSAGE
+RECENT CONVERSATION
+==================================================
+
+{context_display}
+
+==================================================
+CURRENT USER MESSAGE
 ==================================================
 
 {user_input}
