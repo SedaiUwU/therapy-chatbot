@@ -1,25 +1,72 @@
-import streamlit as st
+import logging
 import re
 import time
-import random
 
-from ibm_watsonx_ai.foundation_models import Model
+import streamlit as st
+
 from ibm_watsonx_ai import Credentials
+from ibm_watsonx_ai.foundation_models import ModelInference
 
-API_KEY = st.secrets["IBM_API_KEY"]
-PROJECT_ID = st.secrets["IBM_PROJECT_ID"]
-URL = st.secrets["IBM_URL"]
+logger = logging.getLogger(__name__)
 
-credentials = Credentials(
-    url=URL,
-    api_key=API_KEY
-)
 
-model = Model(
-    model_id="mistralai/mistral-small-3-1-24b-instruct-2503",
-    credentials=credentials,
-    project_id=PROJECT_ID
-)
+def get_secret(key, default=None):
+    try:
+        secrets = st.secrets
+    except Exception:
+        secrets = {}
+
+    if isinstance(secrets, dict) and key in secrets and secrets[key] not in (None, ""):
+        return secrets[key]
+
+    value = st.session_state.get(key) if hasattr(st, "session_state") else None
+    if value not in (None, ""):
+        return value
+
+    import os
+    value = os.getenv(key)
+    if value not in (None, ""):
+        return value
+
+    return default
+
+
+def load_runtime_config():
+    return {
+        "api_key": get_secret("IBM_API_KEY"),
+        "project_id": get_secret("IBM_PROJECT_ID"),
+        "url": get_secret("IBM_URL"),
+    }
+
+
+_model = None
+
+
+def get_model():
+    global _model
+
+    if _model is not None:
+        return _model
+
+    config = load_runtime_config()
+    api_key = config["api_key"]
+    project_id = config["project_id"]
+    url = config["url"]
+
+    if not api_key or not project_id or not url:
+        return None
+
+    credentials = Credentials(
+        url=url,
+        api_key=api_key,
+    )
+
+    _model = ModelInference(
+        model_id="mistralai/mistral-small-3-1-24b-instruct-2503",
+        credentials=credentials,
+        project_id=project_id,
+    )
+    return _model
 
 st.set_page_config(page_title="Therapy AI", page_icon="🧠", layout="centered")
 
@@ -41,9 +88,6 @@ if "messages" not in st.session_state:
 
 if "mood_log" not in st.session_state:
     st.session_state.mood_log = []
-
-if "last_topic" not in st.session_state:
-    st.session_state.last_topic = ""
 
 if "emotion_streak" not in st.session_state:
     st.session_state.emotion_streak = 0
@@ -104,14 +148,19 @@ def safe_fallback():
 
 
 def get_ai_response(prompt):
-    for _ in range(2):
+    model = get_model()
+    if model is None:
+        logger.warning("IBM watsonx model not initialized; using fallback response.")
+        return safe_fallback()
+
+    for attempt in range(2):
         try:
             response = model.generate(
                 prompt=prompt,
                 params={
                     "max_new_tokens": 250,
-                    "temperature": 0.6
-                }
+                    "temperature": 0.6,
+                },
             )
 
             text = response["results"][0].get("generated_text", "")
@@ -120,8 +169,10 @@ def get_ai_response(prompt):
             if text:
                 return text
 
-        except Exception:
-            continue
+        except Exception as exc:  # pragma: no cover - exercised in runtime failures only
+            logger.warning("Model inference failed on attempt %s: %s", attempt + 1, exc)
+            if attempt == 1:
+                logger.exception("Final model inference attempt failed.")
 
     return safe_fallback()
 
@@ -139,7 +190,6 @@ if user_input:
     stuck = detect_stuck(user_input)
 
     st.session_state.mood_log.append(mood)
-    st.session_state.last_topic = user_input
 
     # emotion streak tracking
     if len(st.session_state.mood_log) > 1 and st.session_state.mood_log[-1] == st.session_state.mood_log[-2]:
