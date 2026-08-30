@@ -1,3 +1,3 @@
 streamlit
-ibm-watsonx-ai
+openai
 python-dotenv

@@ -294,6 +294,137 @@ def test_syntax_and_imports():
         raise
 
 
+def test_groq_config_missing_key_is_safe_and_non_secret(monkeypatch):
+    """Missing Groq credentials should not crash import or expose secrets."""
+    import app
+
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    config = app.load_llm_config()
+
+    assert config["provider"] == "groq"
+    assert config["model"] == "openai/gpt-oss-120b"
+    assert config["base_url"] == "https://api.groq.com/openai/v1"
+    assert config["api_key"] in (None, "")
+    assert "GROQ_API_KEY" in str(config)
+    assert "secret" not in str(config).lower()
+
+
+def test_provider_error_uses_fallback(monkeypatch):
+    """Initialization or generation errors should return the safe fallback."""
+    import app
+
+    def boom():
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(app, "get_llm_client", boom)
+    fallback = app.safe_fallback()
+    assert app.get_ai_response("hello") == fallback
+
+
+def test_groq_request_configuration_contract():
+    """Verify the OpenAI-compatible request uses the supported Groq parameters."""
+    import app
+
+    config = app.load_llm_config()
+    assert config["model"] == "openai/gpt-oss-120b"
+
+    payload = {
+        "model": config["model"],
+        "messages": [{"role": "user", "content": "hello"}],
+        "temperature": 0.6,
+        "reasoning_effort": "low",
+        "max_completion_tokens": 400,
+    }
+
+    assert payload["model"] == "openai/gpt-oss-120b"
+    assert payload["reasoning_effort"] == "low"
+    assert payload["max_completion_tokens"] == 400
+    assert "max_tokens" not in payload
+    assert "include_reasoning" not in payload
+
+
+def test_user_content_only_is_returned(monkeypatch):
+    """Only message.content should be displayed to the user; reasoning is ignored."""
+    import app
+
+    class DummyMessage:
+        content = "Visible response"
+        reasoning = "hidden internal reasoning"
+
+    class DummyChoice:
+        message = DummyMessage()
+
+    class DummyResponse:
+        choices = [DummyChoice()]
+
+    class DummyClient:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kwargs):
+                    assert kwargs["model"] == "openai/gpt-oss-120b"
+                    assert kwargs["reasoning_effort"] == "low"
+                    assert kwargs["max_completion_tokens"] == 400
+                    assert "max_tokens" not in kwargs
+                    assert "include_reasoning" not in kwargs
+                    return DummyResponse()
+
+    monkeypatch.setattr(app, "get_llm_client", lambda: DummyClient())
+    response = app.get_ai_response("hello")
+
+    assert response == "Visible response"
+    assert "hidden internal reasoning" not in response
+
+
+def test_prompt_uses_recent_context_before_current_message():
+    """Recent conversation should appear before the current user message and include usage instructions."""
+    messages = [
+        {"role": "user", "content": "My exam is tomorrow."},
+        {"role": "assistant", "content": "That sounds stressful."},
+        {"role": "user", "content": "I'm scared I'll fail."},
+        {"role": "assistant", "content": "Let's focus on what matters most."},
+        {"role": "user", "content": "What should I do tonight?"},
+    ]
+
+    from app import build_recent_context
+
+    recent_context = build_recent_context(messages)
+    context_display = recent_context if recent_context else "(No prior conversation)"
+    user_input = "What should I do tonight?"
+
+    prompt = f"""
+You are an emotionally intelligent reasoning-based conversational AI companion (v5).
+
+==================================================
+BEHAVIOR / RESPONSE RULES
+==================================================
+
+- Use the recent conversation to interpret the current message. Resolve references such as 'it', 'that', 'tonight', 'what should I do?', or other context-dependent statements using the ongoing topic. Do not treat the current message as an isolated conversation when recent context makes its meaning clear.
+
+==================================================
+RECENT CONVERSATION
+==================================================
+
+{context_display}
+
+==================================================
+CURRENT USER MESSAGE
+==================================================
+
+{user_input}
+
+ASSISTANT RESPONSE:
+"""
+
+    assert "RECENT CONVERSATION" in prompt
+    assert prompt.index("RECENT CONVERSATION") < prompt.index("CURRENT USER MESSAGE")
+    assert "Use the recent conversation to interpret the current message" in prompt
+    assert "My exam is tomorrow." in prompt
+    assert "I'm scared I'll fail." in prompt
+    assert "What should I do tonight?" in prompt
+    assert "What should I do tonight?" not in recent_context
+
+
 if __name__ == "__main__":
     print("Running conversation memory tests...\n")
     

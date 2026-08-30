@@ -1,11 +1,12 @@
 import logging
+import os
 import re
 import time
 
 import streamlit as st
+from dotenv import load_dotenv
 
-from ibm_watsonx_ai import Credentials
-from ibm_watsonx_ai.foundation_models import ModelInference
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,6 @@ def get_secret(key, default=None):
     if value not in (None, ""):
         return value
 
-    import os
     value = os.getenv(key)
     if value not in (None, ""):
         return value
@@ -31,42 +31,46 @@ def get_secret(key, default=None):
     return default
 
 
-def load_runtime_config():
-    return {
-        "api_key": get_secret("IBM_API_KEY"),
-        "project_id": get_secret("IBM_PROJECT_ID"),
-        "url": get_secret("IBM_URL"),
+def load_llm_config():
+    api_key = get_secret("GROQ_API_KEY")
+    config = {
+        "provider": "groq",
+        "model": "openai/gpt-oss-120b",
+        "base_url": "https://api.groq.com/openai/v1",
+        "api_key": api_key,
+        "key_name": "GROQ_API_KEY",
     }
+    if not api_key:
+        config["missing_key"] = "GROQ_API_KEY"
+    return config
 
 
-_model = None
+_llm_client = None
 
 
-def get_model():
-    global _model
+def get_llm_client():
+    global _llm_client
 
-    if _model is not None:
-        return _model
+    if _llm_client is not None:
+        return _llm_client
 
-    config = load_runtime_config()
+    config = load_llm_config()
     api_key = config["api_key"]
-    project_id = config["project_id"]
-    url = config["url"]
 
-    if not api_key or not project_id or not url:
+    if not api_key:
+        logger.warning(
+            "Groq API key not configured. Set GROQ_API_KEY in the local environment or Streamlit secrets."
+        )
         return None
 
-    credentials = Credentials(
-        url=url,
-        api_key=api_key,
-    )
+    try:
+        from openai import OpenAI
 
-    _model = ModelInference(
-        model_id="mistralai/mistral-small-3-1-24b-instruct-2503",
-        credentials=credentials,
-        project_id=project_id,
-    )
-    return _model
+        _llm_client = OpenAI(api_key=api_key, base_url=config["base_url"])
+        return _llm_client
+    except Exception:
+        logger.exception("Failed to initialize the Groq/OpenAI-compatible client.")
+        return None
 
 st.set_page_config(page_title="Therapy AI", page_icon="🧠", layout="centered")
 
@@ -189,31 +193,49 @@ def build_recent_context(messages, max_messages=6):
 
 
 def get_ai_response(prompt):
-    model = get_model()
-    if model is None:
-        logger.warning("IBM watsonx model not initialized; using fallback response.")
+    config = load_llm_config()
+
+    if not config.get("api_key"):
+        logger.warning(
+            "Groq is not configured. Set GROQ_API_KEY in the local environment or Streamlit secrets before starting the app."
+        )
+        return safe_fallback()
+
+    try:
+        client = get_llm_client()
+    except Exception:
+        logger.exception("Groq client initialization failed; using fallback response.")
+        return safe_fallback()
+
+    if client is None:
+        logger.warning("Groq client unavailable; using fallback response.")
         return safe_fallback()
 
     for attempt in range(2):
         try:
-            response = model.generate(
-                prompt=prompt,
-                params={
-                    "max_new_tokens": 250,
-                    "temperature": 0.6,
-                },
+            response = client.chat.completions.create(
+                model=config["model"],
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.6,
+                reasoning_effort="low",
+                max_completion_tokens=400,
             )
 
-            text = response["results"][0].get("generated_text", "")
-            text = clean_output(text)
+            content = ""
+            if getattr(response, "choices", None):
+                message = response.choices[0].message
+                content = getattr(message, "content", "") or ""
+                if isinstance(content, list):
+                    content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
 
+            text = clean_output(content)
             if text:
                 return text
 
         except Exception as exc:  # pragma: no cover - exercised in runtime failures only
-            logger.warning("Model inference failed on attempt %s: %s", attempt + 1, exc)
+            logger.warning("Groq generation failed on attempt %s: %s", attempt + 1, type(exc).__name__)
             if attempt == 1:
-                logger.exception("Final model inference attempt failed.")
+                logger.exception("Final Groq generation attempt failed.")
 
     return safe_fallback()
 
@@ -274,13 +296,12 @@ if user_input:
             prompt = f"""
 You are a grounding-focused emotional AI.
 
-The user is stuck or uncertain.
-
-RULES:
+BEHAVIOR / RESPONSE RULES
 - DO NOT ask questions
 - DO NOT increase thinking load
 - DO NOT repeat empathy loops
 - Keep response calm and short (2-3 sentences)
+- Use the recent conversation to interpret the current message. Resolve references such as 'it', 'that', 'tonight', 'what should I do?', or other context-dependent statements using the ongoing topic. Do not treat the current message as an isolated conversation when recent context makes its meaning clear.
 
 TASK:
 - Validate uncertainty
@@ -290,7 +311,7 @@ TASK:
 CURRENT USER MESSAGE:
 {user_input}
 
-RESPONSE:
+ASSISTANT RESPONSE:
 """
 
         # EMOTION LOOP PROTECTION
@@ -303,17 +324,18 @@ You are a calm emotional stabilizer AI.
 
 The user is stuck in emotional repetition.
 
-RULES:
+BEHAVIOR / RESPONSE RULES
 - reduce emotional intensity
 - avoid repeated empathy
 - avoid questions
 - give grounding + gentle forward direction
-- 2–3 sentences max{context_section}
+- 2–3 sentences max
+- Use the recent conversation to interpret the current message. Resolve references such as 'it', 'that', 'tonight', 'what should I do?', or other context-dependent statements using the ongoing topic. Do not treat the current message as an isolated conversation when recent context makes its meaning clear.{context_section}
 
 CURRENT USER MESSAGE:
 {user_input}
 
-RESPONSE:
+ASSISTANT RESPONSE:
 """
 
         else:
@@ -324,7 +346,7 @@ RESPONSE:
 You are an emotionally intelligent reasoning-based conversational AI companion (v5).
 
 ==================================================
-CORE SYSTEM BEHAVIOR
+BEHAVIOR / RESPONSE RULES
 ==================================================
 
 You MUST dynamically choose:
@@ -333,10 +355,7 @@ You MUST dynamically choose:
 2. SITUATIONAL CLARITY (what is happening)
 3. GROUNDING OR DIRECTION (reduce emotional load OR gently move forward)
 
-==================================================
-CRITICAL RULES
-==================================================
-
+- Use the recent conversation to interpret the current message. Resolve references such as 'it', 'that', 'tonight', 'what should I do?', or other context-dependent statements using the ongoing topic. Do not treat the current message as an isolated conversation when recent context makes its meaning clear.
 - NEVER loop empathy phrases
 - NEVER ask multiple questions
 - NEVER ignore confusion states
