@@ -6,6 +6,13 @@ from dataclasses import dataclass
 
 import streamlit as st
 from dotenv import load_dotenv
+from safety import (
+    AMBIGUOUS_CONCERN,
+    EXPLICIT_HIGH_RISK,
+    THIRD_PARTY_CONCERN,
+    classify_safety,
+    deterministic_safety_response,
+)
 
 load_dotenv()
 
@@ -28,7 +35,6 @@ def get_secret(key, default=None):
     value = os.getenv(key)
     if value not in (None, ""):
         return value
-
     return default
 
 
@@ -407,6 +413,18 @@ def get_ai_response(prompt):
     return safe_fallback()
 
 
+def get_safety_response(user_input, recent_messages):
+    recent_user_messages = [
+        message.get("content", "")
+        for message in recent_messages
+        if message.get("role") == "user" and message.get("content")
+    ][-6:]
+    analysis = classify_safety(user_input, recent_user_messages)
+    if analysis.category in {EXPLICIT_HIGH_RISK, AMBIGUOUS_CONCERN, THIRD_PARTY_CONCERN}:
+        return deterministic_safety_response(analysis)
+    return None
+
+
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
@@ -416,35 +434,37 @@ user_input = st.chat_input("How are you feeling today?")
 
 if user_input:
 
-    analysis = analyze_message(user_input, st.session_state.messages)
-    mood = analysis.emotion
-    emotion_streak, stuck_state = update_conversation_state(
-        st.session_state.emotion_streak,
-        st.session_state.stuck_state,
-        analysis,
-    )
+    ai_reply = get_safety_response(user_input, st.session_state.messages)
 
-    st.session_state.mood_log.append(mood)
-    st.session_state.emotion_streak = emotion_streak
-    st.session_state.stuck_state = stuck_state
+    if ai_reply is not None:
+        st.session_state.messages.append({
+            "role": "user",
+            "content": user_input
+        })
 
-    st.session_state.messages.append({
-        "role": "user",
-        "content": user_input
-    })
+        with st.chat_message("user"):
+            st.markdown(user_input)
+    else:
 
-    with st.chat_message("user"):
-        st.markdown(user_input)
-
-    danger_words = ["suicide", "self harm", "kill myself", "hurt myself"]
-
-    if any(word in user_input.lower() for word in danger_words):
-        ai_reply = (
-            "I'm really sorry you're feeling this way. You're not alone, and what you're feeling matters. "
-            "If possible, please reach out to someone you trust or a support service right now."
+        analysis = analyze_message(user_input, st.session_state.messages)
+        mood = analysis.emotion
+        emotion_streak, stuck_state = update_conversation_state(
+            st.session_state.emotion_streak,
+            st.session_state.stuck_state,
+            analysis,
         )
 
-    else:
+        st.session_state.mood_log.append(mood)
+        st.session_state.emotion_streak = emotion_streak
+        st.session_state.stuck_state = stuck_state
+
+        st.session_state.messages.append({
+            "role": "user",
+            "content": user_input
+        })
+
+        with st.chat_message("user"):
+            st.markdown(user_input)
 
         # ==============================
         # EMOTIONAL REASONING ENGINE v6
