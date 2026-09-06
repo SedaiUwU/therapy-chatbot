@@ -425,6 +425,126 @@ ASSISTANT RESPONSE:
     assert "What should I do tonight?" not in recent_context
 
 
+def test_phase3_emotion_classification():
+    from app import analyze_message
+
+    assert analyze_message("I feel sad").emotion == "sad"
+    assert analyze_message("I'm not sad anymore").emotion != "sad"
+    assert analyze_message("I'm not stressed").emotion != "stressed"
+    assert analyze_message("I was anxious yesterday").emotion != "anxious"
+    assert analyze_message("I feel stressed about tomorrow").emotion == "stressed"
+    assert analyze_message("I'm nervous").emotion == "anxious"
+    assert analyze_message("I feel calm now").emotion == "positive"
+
+    mixed_stress = analyze_message("I'm okay but stressed about tomorrow")
+    assert mixed_stress.emotion == "stressed"
+
+    mixed_hope = analyze_message("I'm sad but hopeful")
+    assert mixed_hope.emotion == "sad"
+    assert "positive" in mixed_hope.secondary_emotions
+
+
+def test_phase3_uncertainty_classification():
+    from app import analyze_message
+
+    for message in (
+        "I don't know what to do",
+        "I do not know what to do",
+        "I'm confused",
+        "I am confused",
+        "I feel stuck",
+        "I can't decide",
+        "I cannot decide",
+        "I have no idea",
+    ):
+        assert analyze_message(message).is_uncertain is True
+
+    for message in (
+        "Nothing really happened but I'm okay",
+        "Nothing new today",
+        "There is nothing to worry about",
+    ):
+        assert analyze_message(message).is_uncertain is False
+
+
+def test_phase3_advice_detection_and_combined_state():
+    from app import analyze_message
+
+    for message in (
+        "What should I do?",
+        "What should I do tonight?",
+        "Can you suggest something?",
+        "I need advice",
+        "How do I handle this?",
+        "What would help?",
+    ):
+        assert analyze_message(message).is_advice_request is True
+
+    combined = analyze_message("I don't know what to do. Can you help me?")
+    assert combined.is_uncertain is True
+    assert combined.is_advice_request is True
+    assert combined.intent == "practical_advice"
+
+    stuck_advice = analyze_message("I feel stuck. What should I do tonight?")
+    assert stuck_advice.is_uncertain is True
+    assert stuck_advice.is_advice_request is True
+
+
+def test_phase3_context_keeps_current_emotion_separate():
+    from app import analyze_message
+
+    previous = [{"role": "user", "content": "I am stressed about my exam tomorrow."}]
+    follow_up = analyze_message("What should I do tonight?", previous)
+
+    assert follow_up.emotion == "neutral"
+    assert follow_up.intent == "practical_advice"
+    assert follow_up.contextual_emotion == "stressed"
+
+    resolved = analyze_message("I feel fine now", [{"role": "user", "content": "I am anxious."}])
+    assert resolved.emotion != "anxious"
+    assert resolved.is_distress is False
+
+
+def test_phase3_streak_counts_distress_not_labels():
+    from app import analyze_message, update_conversation_state
+
+    streak = 0
+    stuck = 0
+    for message in ("I am good", "What should I do?", "Nothing new today"):
+        streak, stuck = update_conversation_state(streak, stuck, analyze_message(message))
+    assert streak == 0
+
+    streak = 0
+    for message in ("I feel sad", "I am stressed", "I am anxious"):
+        streak, _ = update_conversation_state(streak, 0, analyze_message(message))
+    assert streak == 3
+
+    streak, _ = update_conversation_state(streak, 0, analyze_message("I feel calm now"))
+    assert streak == 0
+
+    streak, _ = update_conversation_state(0, 0, analyze_message("I'm not stressed"))
+    assert streak == 0
+
+
+def test_phase3_prompt_priority_keeps_advice_ahead_of_uncertainty():
+    from app import analyze_message, select_prompt_branch
+
+    analysis = analyze_message("I feel stuck. What should I do tonight?")
+    assert select_prompt_branch(analysis, 0) == "advice"
+
+def test_phase3_normal_prompt_does_not_invent_distress():
+    from app import NO_ASSUMED_DISTRESS_RULE, analyze_message, build_response_guidance
+
+    analysis = analyze_message("Nothing really happened today but I'm okay.")
+    prompt_guidance = build_response_guidance(analysis)
+
+    assert analysis.emotion == "neutral"
+    assert analysis.is_distress is False
+    assert analysis.is_uncertain is False
+    assert NO_ASSUMED_DISTRESS_RULE in prompt_guidance
+    assert "Do not assume the user is distressed" in prompt_guidance
+
+
 if __name__ == "__main__":
     print("Running conversation memory tests...\n")
     
