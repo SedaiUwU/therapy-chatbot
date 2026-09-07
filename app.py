@@ -147,7 +147,7 @@ html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"],
 .therapy-header,
 .therapy-empty-state {
     width: min(100%, 820px);
-    margin-left: auto;
+    margin-left: 0;
     margin-right: auto;
 }
 
@@ -267,17 +267,22 @@ html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"],
 }
 
 [data-testid="stBottom"] {
-    background: var(--therapy-background);
+    background: transparent;
 }
 
 [data-testid="stBottomBlockContainer"] {
-    background: var(--therapy-background);
+    background: transparent;
     padding: 0.25rem 0 1rem;
+}
+
+[data-testid="stBottom"] > div {
+    background: transparent;
 }
 
 [data-testid="stChatInput"] {
     width: min(100%, 820px);
-    margin: 0 auto;
+    margin-left: max(0px, calc((100% - 1116px) / 2));
+    margin-right: 0;
 }
 
 [data-testid="stChatInput"] > div {
@@ -490,6 +495,12 @@ html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"],
 
     [data-testid="stChatMessage"]:has([aria-label="Chat message from user"]) [data-testid="stChatMessageContent"] {
         max-width: 90%;
+    }
+
+    [data-testid="stChatInput"] {
+        width: min(100%, calc(100% - 1.7rem));
+        margin-left: auto;
+        margin-right: auto;
     }
 
     .therapy-empty-state {
