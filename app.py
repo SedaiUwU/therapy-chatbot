@@ -23,6 +23,7 @@ from conversation_engine import (
     select_prompt_branch,
     update_conversation_state,
 )
+from llm_provider import build_groq_config, create_groq_client
 from safety import (
     AMBIGUOUS_CONCERN,
     EXPLICIT_HIGH_RISK,
@@ -57,13 +58,7 @@ def get_secret(key, default=None):
 
 def load_llm_config():
     api_key = get_secret("GROQ_API_KEY")
-    config = {
-        "provider": "groq",
-        "model": "openai/gpt-oss-120b",
-        "base_url": "https://api.groq.com/openai/v1",
-        "api_key": api_key,
-        "key_name": "GROQ_API_KEY",
-    }
+    config = build_groq_config(api_key)
     if not api_key:
         config["missing_key"] = "GROQ_API_KEY"
     return config
@@ -88,9 +83,7 @@ def get_llm_client():
         return None
 
     try:
-        from openai import OpenAI
-
-        _llm_client = OpenAI(api_key=api_key, base_url=config["base_url"])
+        _llm_client = create_groq_client(api_key, config["base_url"])
         return _llm_client
     except Exception:
         logger.exception("Failed to initialize the Groq/OpenAI-compatible client.")

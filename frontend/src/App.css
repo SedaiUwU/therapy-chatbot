@@ -1,0 +1,33 @@
+.app-shell {
+  min-height: 100vh;
+  padding: 46px clamp(24px, 6vw, 92px) 34px;
+  background: radial-gradient(circle at 8% 12%, rgba(143, 182, 142, 0.28), transparent 27%), radial-gradient(circle at 92% 16%, rgba(121, 185, 232, 0.22), transparent 28%), radial-gradient(circle at 75% 92%, rgba(231, 166, 106, 0.18), transparent 29%), var(--cream);
+}
+.app-header, .workspace, .composer-wrap { width: min(1180px, 100%); margin: 0 auto; }
+.app-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; padding-bottom: 34px; }
+.brand-lockup { display: flex; align-items: center; gap: 16px; }
+.brand-mark { width: 15px; height: 15px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 8px rgba(223, 234, 223, 0.86); }
+.eyebrow { margin: 0 0 5px; color: var(--faint); font-size: 0.73rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+h1, h2 { font-family: 'Manrope', sans-serif; }
+h1 { margin: 0; color: var(--ink); font-size: clamp(2rem, 4vw, 2.8rem); letter-spacing: -0.04em; line-height: 1; }
+.boundary { margin: 0 0 3px; color: var(--faint); font-size: 0.82rem; }
+.boundary span { padding: 0 6px; color: var(--peach); }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 26px; align-items: start; }
+.conversation-panel { min-height: 560px; border: 1px solid var(--line); border-radius: 28px; background: rgba(255, 255, 255, 0.28); box-shadow: 0 20px 55px rgba(88, 69, 56, 0.08); }
+.empty-state { display: flex; min-height: 560px; flex-direction: column; align-items: center; justify-content: center; padding: 50px 24px; text-align: center; }
+.empty-orbit { display: grid; width: 56px; height: 56px; place-items: center; margin-bottom: 22px; border: 1px solid rgba(121, 185, 232, 0.35); border-radius: 50%; color: var(--blue); background: rgba(221, 235, 246, 0.7); font-size: 1.35rem; }
+.empty-state h2 { margin: 0; color: var(--ink); font-size: clamp(1.55rem, 3vw, 2rem); letter-spacing: -0.04em; }
+.empty-state p { max-width: 410px; margin: 12px 0 28px; color: var(--muted); line-height: 1.6; }
+.starter-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; }
+.starter-chips span { padding: 9px 13px; border: 1px solid var(--line); border-radius: 100px; color: var(--muted); background: rgba(255, 255, 255, 0.54); font-size: 0.8rem; }
+.message-list { display: flex; flex-direction: column; gap: 17px; padding: 34px; }
+.message-row { display: flex; }.message-row.user { justify-content: flex-end; }
+.message-bubble { max-width: min(74%, 600px); padding: 15px 18px; border: 1px solid var(--line); border-radius: 20px 20px 20px 5px; background: rgba(255, 255, 255, 0.66); box-shadow: 0 6px 18px rgba(47, 42, 40, 0.05); }
+.message-row.user .message-bubble { border-color: rgba(184, 166, 217, 0.4); border-radius: 20px 20px 5px; background: linear-gradient(135deg, rgba(231, 166, 106, 0.28), rgba(184, 166, 217, 0.25)); }
+.message-label { display: block; margin-bottom: 6px; color: var(--faint); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.message-bubble p { margin: 0; color: var(--ink); line-height: 1.6; white-space: pre-wrap; }
+.loading-bubble { min-width: 110px; }.loading-dots { display: flex; gap: 5px; padding: 7px 0 2px; }.loading-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 1s infinite ease-in-out; }.loading-dots i:nth-child(2) { animation-delay: 0.15s; }.loading-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes pulse { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+.status-panel { padding: 20px 18px; border-top: 3px solid var(--green); border-radius: 18px; background: rgba(255, 255, 255, 0.42); }.status-heading { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 0.8rem; font-weight: 700; }.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(223, 234, 223, 0.8); }.status-copy { margin: 12px 0 18px; color: var(--muted); font-size: 0.8rem; line-height: 1.55; }.status-divider { height: 1px; background: var(--line); }.status-list { margin: 17px 0 0; }.status-list div { display: flex; justify-content: space-between; gap: 12px; margin-top: 11px; }.status-list dt { color: var(--faint); font-size: 0.75rem; }.status-list dd { margin: 0; color: var(--ink); font-size: 0.75rem; font-weight: 700; text-transform: capitalize; }
+.composer-wrap { margin-top: 24px; }.composer { display: flex; align-items: flex-end; gap: 12px; padding: 10px 10px 10px 18px; border: 1px solid var(--line); border-radius: 22px; background: rgba(255, 255, 255, 0.7); box-shadow: 0 10px 28px rgba(47, 42, 40, 0.08); }.composer:focus-within { border-color: rgba(121, 185, 232, 0.7); box-shadow: 0 0 0 3px rgba(121, 185, 232, 0.16); }.composer textarea { width: 100%; min-height: 28px; max-height: 130px; resize: vertical; border: 0; outline: 0; color: var(--ink); background: transparent; line-height: 1.5; }.composer textarea::placeholder { color: var(--faint); }.composer button { display: grid; width: 40px; height: 40px; flex: 0 0 40px; place-items: center; border: 0; border-radius: 50%; color: white; background: var(--ink); font-size: 1.4rem; line-height: 1; transition: transform 160ms ease, background 160ms ease; }.composer button:hover:not(:disabled) { transform: translateY(-2px); background: #514844; }.composer button:disabled { cursor: not-allowed; opacity: 0.35; }.composer-hint { margin: 9px 4px 0; color: var(--faint); font-size: 0.7rem; text-align: right; }.composer-hint span { padding: 0 5px; color: var(--peach); }.error-message { margin: 0 4px 10px; color: #a15c5c; font-size: 0.8rem; }.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (max-width: 800px) { .app-shell { padding: 28px 16px 24px; }.app-header { align-items: flex-start; flex-direction: column; gap: 14px; padding-bottom: 24px; }.workspace { display: block; }.conversation-panel, .empty-state { min-height: 470px; }.status-panel { display: none; }.message-list { padding: 22px 16px; }.message-bubble { max-width: 88%; } }
