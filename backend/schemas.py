@@ -1,4 +1,6 @@
+from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
@@ -42,6 +44,55 @@ class ChatResponse(BaseModel):
     emotion_streak: int
     stuck_state: int
     safety_category: str | None = None
+
+
+class ConversationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, max_length=255)
+
+
+class ConversationResponse(BaseModel):
+    id: UUID
+    title: str | None
+    emotion_streak: int
+    stuck_state: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class PersistedChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_message: str = Field(min_length=1, max_length=10_000)
+
+    @field_validator("current_message")
+    @classmethod
+    def current_message_must_not_be_blank(cls, value):
+        if not value.strip():
+            raise ValueError("current_message must not be blank")
+        return value
+
+
+class PersistedChatResponse(BaseModel):
+    conversation_id: UUID
+    assistant_response: str
+    mood: str | None
+    emotion_streak: int
+    stuck_state: int
+    safety_category: str | None = None
+
+
+class MessageResponse(BaseModel):
+    id: UUID
+    role: MessageRole
+    content: str
+    sequence: int
+    created_at: datetime
+
+
+class ConversationHistoryResponse(ConversationResponse):
+    messages: list[MessageResponse]
 
 
 class HealthResponse(BaseModel):
